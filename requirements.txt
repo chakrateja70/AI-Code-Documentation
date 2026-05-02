@@ -1,0 +1,12 @@
+# Web framework
+fastapi==0.115.12
+uvicorn[standard]==0.34.0
+
+# Data validation
+pydantic==2.11.4
+
+# Git operations (Step 2 — Repository Manager)
+gitpython==3.1.44
+
+# HTTP client (future enrichment / GitHub API calls)
+httpx==0.28.1
