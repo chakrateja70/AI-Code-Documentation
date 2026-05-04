@@ -107,6 +107,88 @@ class FileLoaderResult(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Step 4 — Code Parser (AST Analysis)
+# ---------------------------------------------------------------------------
+
+
+class SymbolInfo(BaseModel):
+    """A symbol (function, class, method, etc.) extracted from source code."""
+
+    kind: str = Field(..., description="Symbol kind: function, class, method, variable, etc.")
+    name: str = Field(..., description="Symbol name")
+    line_start: int = Field(..., description="Starting line number (1-indexed)")
+    line_end: int = Field(..., description="Ending line number (1-indexed, inclusive)")
+    parent: Optional[str] = Field(
+        default=None,
+        description="Parent symbol name (e.g., class name for a method), if any.",
+    )
+
+
+class ParsedFile(BaseModel):
+    """Result of parsing a single source file."""
+
+    relative_path: str = Field(..., description="Path relative to repository root")
+    symbols: list[SymbolInfo] = Field(
+        default_factory=list, description="List of symbols extracted from the file"
+    )
+    imports: list[str] = Field(
+        default_factory=list, description="List of imported modules or files"
+    )
+
+
+class ParseResult(BaseModel):
+    """Aggregated output of the Code Parser step."""
+
+    repo_info: RepoInfo
+    parsed_files: list[ParsedFile] = Field(default_factory=list)
+    parse_duration_seconds: float = 0.0
+    errors: list[str] = Field(
+        default_factory=list,
+        description="Error messages encountered during parsing (per file).",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Step 5 — Agent 1: Code Analyzer
+# ---------------------------------------------------------------------------
+
+
+class AnalyzeRequest(BaseModel):
+    """Request body for the POST /analyze endpoint."""
+
+    github_url: str = Field(
+        ...,
+        examples=["https://github.com/tiangolo/fastapi"],
+        description=(
+            "Public GitHub repository URL. "
+            "The repository must have been ingested first via POST /ingest."
+        ),
+    )
+    language: str = Field(
+        default="python",
+        examples=["python", "javascript", "typescript", "java", "go"],
+        description="Primary programming language of the repository.",
+    )
+    branch: Optional[str] = Field(
+        default=None,
+        description="Branch that was used during ingestion (used to resolve the local path).",
+    )
+
+    @field_validator("language")
+    @classmethod
+    def _normalise_language(cls, v: str) -> str:
+        return v.strip().lower()
+
+
+class AnalyzeResponse(BaseModel):
+    """Response returned by the POST /analyze endpoint."""
+
+    status: str = "success"
+    message: str
+    data: Optional[dict] = None
+
+
+# ---------------------------------------------------------------------------
 # Generic API response wrappers
 # ---------------------------------------------------------------------------
 

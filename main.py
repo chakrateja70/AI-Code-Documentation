@@ -42,8 +42,10 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 
 from src.api.routes.ingest import router as ingest_router  # noqa: E402
+from src.api.routes.analyze import router as analyze_router  # noqa: E402
 
 app.include_router(ingest_router, prefix="/api/v1")
+app.include_router(analyze_router, prefix="/api/v1")
 
 
 # ---------------------------------------------------------------------------

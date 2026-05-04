@@ -10,3 +10,15 @@ gitpython==3.1.44
 
 # HTTP client (future enrichment / GitHub API calls)
 httpx==0.28.1
+
+# AST / code parsing (Step 4 — Code Parser + Agent 1 — Code Analyzer)
+tree-sitter>=0.25.0
+tree-sitter-python>=0.25.0
+
+# LLM providers (Agent layer)
+langchain-google-genai>=4.2.0
+langchain-openai>=1.2.0
+langchain-groq>=0.2.0
+
+# Environment variables
+python-dotenv>=1.0.0
