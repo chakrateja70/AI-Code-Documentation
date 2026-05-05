@@ -16,24 +16,11 @@ from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator
 
-
-# ---------------------------------------------------------------------------
-# Step 1 — Input Layer
-# ---------------------------------------------------------------------------
-
-
 class IngestRequest(BaseModel):
     """Payload sent by the user to kick off the pipeline."""
 
-    github_url: str = Field(
-        ...,
-        examples=["https://github.com/tiangolo/fastapi"],
-        description="Public GitHub repository URL to document.",
-    )
-    branch: Optional[str] = Field(
-        default=None,
-        description="Branch / tag to check out. Defaults to the repo's default branch.",
-    )
+    github_url: str
+    branch: Optional[str] = None
 
     @field_validator("github_url")
     @classmethod
@@ -156,23 +143,9 @@ class ParseResult(BaseModel):
 class AnalyzeRequest(BaseModel):
     """Request body for the POST /analyze endpoint."""
 
-    github_url: str = Field(
-        ...,
-        examples=["https://github.com/tiangolo/fastapi"],
-        description=(
-            "Public GitHub repository URL. "
-            "The repository must have been ingested first via POST /ingest."
-        ),
-    )
-    language: str = Field(
-        default="python",
-        examples=["python", "javascript", "typescript", "java", "go"],
-        description="Primary programming language of the repository.",
-    )
-    branch: Optional[str] = Field(
-        default=None,
-        description="Branch that was used during ingestion (used to resolve the local path).",
-    )
+    github_url: str
+    language: str = "python"
+    branch: Optional[str] = None
 
     @field_validator("language")
     @classmethod
@@ -180,26 +153,22 @@ class AnalyzeRequest(BaseModel):
         return v.strip().lower()
 
 
-class AnalyzeResponse(BaseModel):
-    """Response returned by the POST /analyze endpoint."""
-
-    status: str = "success"
-    message: str
-    data: Optional[dict] = None
-
-
-# ---------------------------------------------------------------------------
-# Generic API response wrappers
-# ---------------------------------------------------------------------------
-
-
 class SuccessResponse(BaseModel):
+    """Standard success response envelope."""
+
+    statusCode: int = 200
     status: str = "success"
     message: str
     data: Optional[dict] = None
+
+
+class AnalyzeResponse(SuccessResponse):
+    """Response returned by the POST /analyze endpoint."""
 
 
 class ErrorResponse(BaseModel):
-    status: str = "error"
-    message: str
-    detail: Optional[str] = None
+    """Standard error response envelope."""
+
+    statusCode: int
+    statusMessage: str
+    errorMessage: str
