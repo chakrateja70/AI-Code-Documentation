@@ -75,18 +75,7 @@ _MAX_FILE_BYTES: int = config.MAX_FILE_SIZE_BYTES
 
 
 class CodeAnalyzerAgent(BaseAgent):
-    """
-    Analyses the source code of a repository and generates overview
-    documentation using an LLM.
-
-    Parameters
-    ----------
-    llm:
-        LangChain-compatible async chat model (must expose ``.ainvoke``).
-    max_workers:
-        Number of threads used for the synchronous ``parse_file`` calls
-        (file I/O + AST parsing is CPU/IO-bound, not truly async).
-    """
+    """Analyze repo structure and generate documentation with an LLM."""
 
     def __init__(self, llm: Any, max_workers: int = 4) -> None:
         super().__init__(llm, "code_analyzer")
@@ -100,24 +89,7 @@ class CodeAnalyzerAgent(BaseAgent):
     # ------------------------------------------------------------------
 
     async def invoke(self, state: DocState) -> Dict[str, Any]:
-        """
-        Entry point called by the orchestrator.
-
-        Reads
-        -----
-        state["repo_path"]  — absolute path to the cloned repo root.
-        state["language"]   — primary language detected for the repo.
-
-        Writes
-        ------
-        state["code_structure"]  — raw dict of modules/functions/classes/imports.
-        state["analysis_output"] — this agent's ``format_output`` envelope.
-
-        Returns
-        -------
-        The ``format_output`` envelope (same object stored in the state).
-        """
-        self.log_execution("Starting code analysis")
+        """Run analysis for the current state and return the output envelope."""
         t_start = time.monotonic()
 
         repo_path: str = state["repo_path"]
@@ -126,17 +98,14 @@ class CodeAnalyzerAgent(BaseAgent):
         # ------------------------------------------------------------------ #
         # Step 1 — collect source files from disk
         # ------------------------------------------------------------------ #
-        self.log_execution(f"Collecting source files (language={language})")
         loop = asyncio.get_running_loop()
         file_infos: List[FileInfo] = await loop.run_in_executor(
             self._executor, self._collect_files, repo_path, language
         )
-        self.log_execution(f"Found {len(file_infos)} source file(s)")
 
         # ------------------------------------------------------------------ #
         # Step 2 — parse each file with tree-sitter (via existing service)
         # ------------------------------------------------------------------ #
-        self.log_execution("Parsing files with AST analyser")
         parsed_files: List[ParsedFile] = await self._parse_files_in_parallel(
             file_infos
         )
@@ -150,7 +119,6 @@ class CodeAnalyzerAgent(BaseAgent):
         # ------------------------------------------------------------------ #
         # Step 4 — ask the LLM to write the documentation prose
         # ------------------------------------------------------------------ #
-        self.log_execution("Invoking LLM for documentation generation")
         overview_docs = await self._generate_documentation(structure)
 
         # ------------------------------------------------------------------ #
@@ -171,11 +139,6 @@ class CodeAnalyzerAgent(BaseAgent):
             },
         )
         state["analysis_output"] = output
-        self.log_execution(
-            f"Analysis complete in {elapsed:.2f}s — "
-            f"{output['metadata']['functions_found']} function(s), "
-            f"{output['metadata']['classes_found']} class(es)"
-        )
         return output
 
     # ------------------------------------------------------------------
@@ -183,13 +146,7 @@ class CodeAnalyzerAgent(BaseAgent):
     # ------------------------------------------------------------------
 
     def _collect_files(self, repo_path: str, language: str) -> List[FileInfo]:
-        """
-        Recursively walk *repo_path* and return ``FileInfo`` objects for
-        every source file that belongs to *language*.
-
-        Files larger than ``_MAX_FILE_BYTES`` have their ``content`` set to
-        ``None`` so the AST parser skips them gracefully.
-        """
+        """Collect FileInfo records for source files in the repo."""
         root = Path(repo_path)
         target_extensions = _LANGUAGE_EXTENSIONS.get(language, {".py"})
         file_infos: List[FileInfo] = []
@@ -205,7 +162,6 @@ class CodeAnalyzerAgent(BaseAgent):
                 try:
                     size = path.stat().st_size
                 except OSError as exc:
-                    self.log_warning(f"Could not stat {path}: {exc}")
                     continue
 
                 content: str | None = None
@@ -216,7 +172,7 @@ class CodeAnalyzerAgent(BaseAgent):
                         if b"\x00" not in raw:
                             content = raw.decode("utf-8", errors="replace")
                     except Exception as exc:
-                        self.log_warning(f"Could not read {path}: {exc}")
+                        pass
 
                 file_infos.append(
                     FileInfo(
@@ -232,17 +188,12 @@ class CodeAnalyzerAgent(BaseAgent):
         return file_infos
 
     def _parse_all_files(self, file_infos: List[FileInfo]) -> List[ParsedFile]:
-        """
-        Call the existing ``parse_file`` service for every ``FileInfo``.
-
-        Errors are caught per-file so one bad file does not abort the run.
-        """
+        """Parse each FileInfo and keep running on per-file errors."""
         parsed: List[ParsedFile] = []
         for fi in file_infos:
             try:
                 parsed.append(parse_file(fi))
             except Exception as exc:
-                self.log_warning(f"parse_file failed for {fi.relative_path}: {exc}")
                 # Append an empty ParsedFile so the module list stays intact.
                 parsed.append(
                     ParsedFile(
@@ -382,7 +333,6 @@ Use clear, professional language suitable for a technical README or API referenc
             # LangChain chat models return an AIMessage; plain callables return str.
             return response.content if hasattr(response, "content") else str(response)
         except Exception as exc:
-            self.log_error(f"LLM invocation failed: {exc}")
             # Graceful fallback — return a minimal auto-generated summary.
             return self._fallback_summary(structure)
 

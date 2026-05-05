@@ -40,15 +40,7 @@ def is_valid_github_url(url: str) -> bool:
 
 
 def parse_github_url(url: str) -> dict[str, str]:
-    """
-    Parse a GitHub URL and return a dict with:
-        - ``owner``   : repository owner / organisation
-        - ``repo``    : repository name (without .git suffix)
-        - ``clone_url``: canonical HTTPS clone URL (always ends with .git)
-
-    Raises:
-        ValueError: if the URL is not a recognisable GitHub repository URL.
-    """
+    """Parse a GitHub URL into owner, repo, and clone_url."""
     url = url.strip()
 
     # Try HTTPS first

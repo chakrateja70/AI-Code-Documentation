@@ -6,16 +6,13 @@ Parses source code files using tree-sitter to extract symbols and imports.
 This version uses manual AST traversal to ensure compatibility across all
 tree-sitter python bindings (0.21, 0.22, 0.25+).
 """
-
+import importlib
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Set
+from tree_sitter import Language, Parser
 
 from src.core.models import FileInfo, ParsedFile, SymbolInfo
 
-
-# ---------------------------------------------------------------------------
-# Extension → module_name
-# ---------------------------------------------------------------------------
 _EXTENSION_MAP: Dict[str, str] = {
     ".py":   "tree_sitter_python",
     ".js":   "tree_sitter_javascript",
@@ -26,11 +23,7 @@ _EXTENSION_MAP: Dict[str, str] = {
     ".go":   "tree_sitter_go",
 }
 
-# ---------------------------------------------------------------------------
-# Parser cache
-# ---------------------------------------------------------------------------
-_PARSERS: Dict[str, object] = {}   # module_name → tree_sitter.Parser
-
+_PARSERS: Dict[str, object] = {}  
 
 def _get_parser(module_name: str) -> Optional[object]:
     """
@@ -39,10 +32,7 @@ def _get_parser(module_name: str) -> Optional[object]:
     if module_name in _PARSERS:
         return _PARSERS[module_name]
 
-    try:
-        import importlib
-        from tree_sitter import Language, Parser
-
+    try:  
         ts_mod = importlib.import_module(module_name)
 
         # tree-sitter-python 0.21+ exposes .language()

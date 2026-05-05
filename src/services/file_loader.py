@@ -28,26 +28,8 @@ from config import EXCLUDED_DIRS, MAX_FILE_SIZE_BYTES, SUPPORTED_EXTENSIONS
 from src.core.models import FileInfo, FileLoaderResult, RepoInfo
 
 
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
-
-
 def load_files(repo_info: RepoInfo) -> FileLoaderResult:
-    """
-    Walk the cloned repository and collect all relevant source files.
-
-    Parameters
-    ----------
-    repo_info:
-        The :class:`RepoInfo` returned by the Repository Manager step.
-
-    Returns
-    -------
-    FileLoaderResult
-        Contains the list of loaded :class:`FileInfo` objects plus metadata
-        (skipped files, counts, duration).
-    """
+    """Collect source files from a repo and return the loader result."""
     root: Path = repo_info.local_path
     files: list[FileInfo] = []
     skipped: list[str] = []
@@ -55,10 +37,6 @@ def load_files(repo_info: RepoInfo) -> FileLoaderResult:
     t_start = time.perf_counter()
 
     for dirpath, dirnames, filenames in os.walk(root, topdown=True):
-        # ----------------------------------------------------------------
-        # Prune excluded directories IN-PLACE so os.walk won't descend into
-        # them.  This is the canonical way to skip subtrees with os.walk.
-        # ----------------------------------------------------------------
         dirnames[:] = [
             d for d in dirnames
             if d not in EXCLUDED_DIRS and not d.endswith(".egg-info")
@@ -114,25 +92,8 @@ def load_files(repo_info: RepoInfo) -> FileLoaderResult:
 
     return result
 
-
-# ---------------------------------------------------------------------------
-# Private helpers
-# ---------------------------------------------------------------------------
-
-
 def _read_text(path: Path) -> tuple[str | None, str]:
-    """
-    Try to read *path* as a UTF-8 text file.
-
-    Falls back to ``latin-1`` (which never raises a ``UnicodeDecodeError``).
-    Returns ``(None, "")`` for binary files that cannot be decoded.
-
-    Returns
-    -------
-    (content, encoding)
-        where *content* is the decoded string (or ``None`` for binary files)
-        and *encoding* is the encoding that succeeded.
-    """
+    """Read text with utf-8/latin-1 fallback and return (content, encoding)."""
     for encoding in ("utf-8", "latin-1"):
         try:
             text = path.read_text(encoding=encoding, errors="strict")

@@ -25,30 +25,15 @@ class DocState(TypedDict, total=False):
     must guard with .get() or handle KeyError defensively.
     """
 
-    # ------------------------------------------------------------------ #
-    # Input (set by the caller / orchestrator before the first agent)
-    # ------------------------------------------------------------------ #
-
-    # Absolute local path to the cloned repository root.
     repo_path: str
-
-    # Primary programming language detected (e.g. "python", "javascript").
     language: str
-
-    # Original GitHub URL supplied by the user.
     github_url: str
-
-    # Branch / tag that was checked out.
     branch: Optional[str]
 
     # ------------------------------------------------------------------ #
     # Agent 1 — CodeAnalyzerAgent
     # ------------------------------------------------------------------ #
-
-    # Raw structural data extracted by AST analysis.
     code_structure: Dict[str, Any]
-
-    # Output of CodeAnalyzerAgent: overview + API docs prose.
     analysis_output: Dict[str, Any]
 
     # ------------------------------------------------------------------ #

@@ -22,16 +22,22 @@ Error handling
 
 from __future__ import annotations
 
-import json
 import re
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Request, status
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter
 
 import config
 from src.agents import CodeAnalyzerAgent
-from src.core.models import AnalyzeRequest, AnalyzeResponse
+from src.services import llm_service
+from src.core.exceptions import (
+    CodeAnalysisFailedException,
+    InvalidRepoUrlException,
+    InvalidRequestBodyException,
+    LlmNotConfiguredException,
+    RepoNotFoundException,
+)
+from src.core.models import AnalyzeRequest, SuccessResponse
 from src.core.state import DocState
 
 router = APIRouter(prefix="/analyze", tags=["Analyze"])
@@ -43,17 +49,7 @@ router = APIRouter(prefix="/analyze", tags=["Analyze"])
 
 
 def _resolve_repo_path(github_url: str) -> Path:
-    """
-    Derive the local clone directory from a GitHub URL.
-
-    Mirrors the naming convention used by ``repo_manager.clone_or_update_repo``:
-        REPOS_DIR / <owner>_<repo>
-
-    Raises
-    ------
-    ValueError
-        If the URL cannot be parsed into owner/repo components.
-    """
+    """Resolve the local clone directory for a GitHub URL."""
     # Accept both  https://github.com/owner/repo  and  github.com/owner/repo
     match = re.search(r"github\.com[/:]([^/]+)/([^/.\s]+?)(?:\.git)?$", github_url)
     if not match:
@@ -64,11 +60,6 @@ def _resolve_repo_path(github_url: str) -> Path:
     return config.REPOS_DIR / f"{owner}__{repo}"
 
 
-def _looks_like_json(value: str) -> bool:
-    stripped = value.strip()
-    return bool(stripped) and stripped[0] in "{["
-
-
 # ---------------------------------------------------------------------------
 # POST /analyze
 # ---------------------------------------------------------------------------
@@ -76,88 +67,35 @@ def _looks_like_json(value: str) -> bool:
 
 @router.post(
     "/",
-    response_model=AnalyzeResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Analyze a repository with Agent 1 — Code Analyzer",
-    description=(
-        "Runs the CodeAnalyzerAgent on a previously ingested repository. "
-        "The agent extracts the code structure (modules, classes, functions, imports) "
-        "using AST analysis and generates comprehensive documentation prose via an LLM. "
-        "**The repository must be ingested first via POST /ingest.**"
-    ),
+    response_model=SuccessResponse,
 )
-async def analyze_repository(request: Request) -> AnalyzeResponse:
-    """
-    Agent 1 — Code Analyzer endpoint.
+async def analyze_repository(body: AnalyzeRequest | str) -> SuccessResponse:
 
-    Steps
-    -----
-    1. Parse + validate the request body (handles plain JSON and double-encoded strings).
-    2. Resolve the local clone path.
-    3. Initialise the LLM from environment configuration.
-    4. Build ``DocState`` and call ``CodeAnalyzerAgent.invoke``.
-    5. Return structured analysis output.
-    """
+    # Support clients that accidentally send a JSON object as a string.
+    if isinstance(body, str):
+        try:
+            body = AnalyzeRequest.model_validate_json(body)
+        except Exception as exc:
+            raise InvalidRequestBodyException(
+                "Expected a JSON object with github_url, language, and optional branch"
+            )
 
-    # ------------------------------------------------------------------
-    # 1. Parse request body — robust to double-encoded JSON strings
-    #    (happens when client sends Content-Type: text/plain or omits it)
-    # ------------------------------------------------------------------
-    try:
-        raw = await request.body()
-        payload = json.loads(raw)
-        # If the payload itself is a JSON string (double-encoded), parse again
-        # only when it looks like a JSON object/array.
-        if isinstance(payload, str):
-            if _looks_like_json(payload):
-                payload = json.loads(payload)
-            else:
-                raise ValueError("Request body is a JSON string, not an object")
-        body = AnalyzeRequest(**payload)
-    except (json.JSONDecodeError, TypeError, ValueError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=(
-                f"Invalid request body: {exc}. "
-                "Send a JSON object with 'github_url', 'language', and optionally 'branch'. "
-                "Make sure Content-Type is application/json."
-            ),
-        ) from exc
-
-    # ------------------------------------------------------------------
-    # 2. Resolve local repo path
-    # ------------------------------------------------------------------
+    # Step 2: Resolve local repo path
     try:
         repo_path = _resolve_repo_path(body.github_url)
     except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(exc),
-        ) from exc
+        raise InvalidRepoUrlException(body.github_url)
 
     if not repo_path.exists():
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=(
-                f"Repository '{repo_path.name}' not found locally. "
-                "Please call POST /api/v1/ingest first to clone the repository."
-            ),
-        )
+        raise RepoNotFoundException(repo_path.name)
 
-    # ------------------------------------------------------------------
-    # 3. Initialise LLM
-    # ------------------------------------------------------------------
+    # Step 3: Initialize LLM
     try:
-        llm = config.get_llm()
+        llm = llm_service.get_llm()
     except RuntimeError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=str(exc),
-        ) from exc
+        raise LlmNotConfiguredException(str(exc))
 
-    # ------------------------------------------------------------------
-    # 4. Build DocState and run the agent
-    # ------------------------------------------------------------------
+    # Step 4: Build DocState and run agent
     state: DocState = {
         "repo_path": str(repo_path),
         "language": body.language,
@@ -170,25 +108,14 @@ async def analyze_repository(request: Request) -> AnalyzeResponse:
         agent = CodeAnalyzerAgent(llm=llm)
         output = await agent.invoke(state)
     except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Code analysis failed: {exc}",
-        ) from exc
+        raise CodeAnalysisFailedException(str(exc))
 
-    # ------------------------------------------------------------------
-    # 5. Build response
-    # ------------------------------------------------------------------
+    # Step 5: Build response
     meta = output.get("metadata", {})
     owner_repo = repo_path.name  # e.g. "tiangolo_fastapi"
 
-    return AnalyzeResponse(
-        status="success",
-        message=(
-            f"Code analysis complete for '{owner_repo}'. "
-            f"{meta.get('functions_found', 0)} function(s) and "
-            f"{meta.get('classes_found', 0)} class(es) found across "
-            f"{meta.get('modules_found', 0)} module(s)."
-        ),
+    return SuccessResponse(
+        message=f"Code analysis complete for '{owner_repo}'.",
         data={
             "repo": {
                 "github_url": body.github_url,

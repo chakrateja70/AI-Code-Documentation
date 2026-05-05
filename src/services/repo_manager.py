@@ -1,67 +1,14 @@
-"""
-src/services/repo_manager.py
-
-Repository Manager (Step 2)
-============================
-Responsible for:
-  1. Validating and parsing the incoming GitHub URL.
-  2. Cloning the repository to the local ``repos/`` directory.
-  3. Re-using an already-cloned copy if one exists (git pull to update it).
-  4. Returning a :class:`RepoInfo` instance that downstream steps can consume.
-
-Design notes
-------------
-* Uses the ``gitpython`` library for all Git operations so that we never
-  shell out directly — this gives us proper error handling and cross-platform
-  support.
-* The local clone lives at  ``<REPOS_DIR>/<owner>__<repo>/``.
-* All heavy I/O is synchronous; the FastAPI endpoint runs it in a thread-pool
-  via ``asyncio.to_thread`` (see the route handler).
-"""
+import git
 
 from datetime import datetime
 from pathlib import Path
-
-import git  # gitpython
 
 from config import REPOS_DIR
 from src.core.models import RepoInfo
 from src.utils.github_utils import parse_github_url
 
-
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
-
-
-def clone_or_update_repo(
-    github_url: str,
-    branch: str | None = None,
-) -> RepoInfo:
-    """
-    Clone *github_url* into the local cache, or ``git pull`` if it already
-    exists.
-
-    Parameters
-    ----------
-    github_url:
-        A validated GitHub repository URL (HTTPS or SSH).
-    branch:
-        Optional branch / tag to check out after cloning.  When *None* the
-        repository's default branch is used.
-
-    Returns
-    -------
-    RepoInfo
-        Metadata object describing the cloned repository.
-
-    Raises
-    ------
-    ValueError
-        If the URL cannot be parsed as a GitHub repository URL.
-    git.GitCommandError
-        If the clone / pull operation fails (e.g. private repo, network error).
-    """
+def clone_or_update_repo( github_url: str, branch: str | None = None) -> RepoInfo:
+    """Clone or update a repo and return its metadata."""
     parsed = parse_github_url(github_url)
     owner: str = parsed["owner"]
     repo_name: str = parsed["repo"]
@@ -113,31 +60,48 @@ def _clone_repo(clone_url: str, dest: Path, branch: str | None) -> git.Repo:
     try:
         repo = git.Repo.clone_from(**kwargs)
         return repo
-    except git.GitCommandError:
-        raise
+    except git.GitCommandError as e:
+        raise RuntimeError(f"git clone failed for {clone_url}: {e}") from e
+    except (git.exc.NoSuchPathError, git.exc.InvalidGitRepositoryError) as e:
+        raise RuntimeError(f"invalid destination or repo when cloning to {dest}: {e}") from e
+    except Exception as e:
+        raise RuntimeError(f"unexpected error cloning {clone_url} to {dest}: {e}") from e
 
 
 def _pull_repo(local_dir: Path, branch: str | None) -> git.Repo:
-    """
-    Open the existing local clone and pull the latest changes.
-
-    If *branch* is provided and differs from the current branch, check it out.
-    """
+    """Open a local clone, optionally checkout a branch, and pull."""
+    # Open the repository and validate
     try:
         repo = git.Repo(str(local_dir))
-        origin = repo.remotes.origin
+    except git.exc.NoSuchPathError as e:
+        raise FileNotFoundError(f"Local repo path not found: {local_dir}") from e
+    except git.exc.InvalidGitRepositoryError as e:
+        raise RuntimeError(f"Not a git repository: {local_dir}") from e
+    except Exception as e:
+        raise RuntimeError(f"error opening repository at {local_dir}: {e}") from e
 
-        if branch:
-            # Checkout the requested branch if it's not already active
+    origin = repo.remotes.origin
+
+    if branch:
+        # Checkout the requested branch if it's not already active
+        try:
             try:
                 current = repo.active_branch.name
             except TypeError:
                 current = None
 
             if current != branch:
-                repo.git.checkout(branch)
+                try:
+                    repo.git.checkout(branch)
+                except git.GitCommandError as e:
+                    raise RuntimeError(f"failed to checkout branch '{branch}' in {local_dir}: {e}") from e
+        except Exception as e:
+            raise RuntimeError(f"error while checking out branch '{branch}' in {local_dir}: {e}") from e
 
+    try:
         origin.pull()
         return repo
-    except git.GitCommandError:
-        raise
+    except git.GitCommandError as e:
+        raise RuntimeError(f"git pull failed for {local_dir}: {e}") from e
+    except Exception as e:
+        raise RuntimeError(f"unexpected error pulling {local_dir}: {e}") from e
