@@ -94,13 +94,7 @@ class AnalyzeRequest(BaseModel):
     """Request body for the POST /analyze endpoint."""
 
     github_url: str
-    language: str = "python"
     branch: Optional[str] = None
-
-    @field_validator("language")
-    @classmethod
-    def _normalise_language(cls, v: str) -> str:
-        return v.strip().lower()
 
 
 class SuccessResponse(BaseModel):

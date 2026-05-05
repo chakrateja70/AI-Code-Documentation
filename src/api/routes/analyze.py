@@ -77,7 +77,7 @@ async def analyze_repository(body: AnalyzeRequest | str) -> SuccessResponse:
             body = AnalyzeRequest.model_validate_json(body)
         except Exception as exc:
             raise InvalidRequestBodyException(
-                "Expected a JSON object with github_url, language, and optional branch"
+                "Expected a JSON object with github_url and optional branch"
             )
 
     # Step 2: Resolve local repo path
@@ -98,7 +98,6 @@ async def analyze_repository(body: AnalyzeRequest | str) -> SuccessResponse:
     # Step 4: Build DocState and run agent
     state: DocState = {
         "repo_path": str(repo_path),
-        "language": body.language,
         "github_url": body.github_url,
         "branch": body.branch,
         "errors": [],
@@ -120,7 +119,6 @@ async def analyze_repository(body: AnalyzeRequest | str) -> SuccessResponse:
             "repo": {
                 "github_url": body.github_url,
                 "local_path": str(repo_path),
-                "language": body.language,
                 "branch": body.branch,
             },
             "analysis": {

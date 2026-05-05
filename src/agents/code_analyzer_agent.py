@@ -34,44 +34,11 @@ from src.agents.base_agent import BaseAgent
 from src.core.models import FileInfo, ParsedFile
 from src.core.state import DocState
 from src.services.code_parser import parse_file
-from config import Settings
+from config import settings
 
-
-# ---------------------------------------------------------------------------
-# Language → file-extension mapping (mirrors config.py SUPPORTED_EXTENSIONS)
-# ---------------------------------------------------------------------------
-
-_LANGUAGE_EXTENSIONS: Dict[str, set[str]] = {
-    "python":     {".py"},
-    "javascript": {".js", ".jsx"},
-    "typescript": {".ts", ".tsx"},
-    "java":       {".java"},
-    "go":         {".go"},
-    "rust":       {".rs"},
-    "cpp":        {".cpp", ".cc", ".cxx", ".h", ".hpp"},
-    "c":          {".c", ".h"},
-    "csharp":     {".cs"},
-    "ruby":       {".rb"},
-    "php":        {".php"},
-    "kotlin":     {".kt"},
-    "swift":      {".swift"},
-    "scala":      {".scala"},
-}
-
-# Directories that are never worth analysing.
-_SKIP_DIRS: frozenset[str] = frozenset(
-    {
-        ".git", ".github", "__pycache__", "node_modules",
-        ".venv", "venv", "env", ".env",
-        "dist", "build", "out", ".next", ".nuxt",
-        "target", "vendor",
-        ".mypy_cache", ".pytest_cache", ".ruff_cache",
-        "coverage", "htmlcov",
-    }
-)
 
 # Maximum file size we'll read into memory for AST analysis.
-Settings = Settings()  # Load settings once at module level
+
 
 class CodeAnalyzerAgent(BaseAgent):
     """Analyze repo structure and generate documentation with an LLM."""
@@ -80,7 +47,7 @@ class CodeAnalyzerAgent(BaseAgent):
         super().__init__(llm, "code_analyzer")
         self._max_workers = max(1, max_workers)
         self._executor = ThreadPoolExecutor(
-            max_workers=Settings.MAX_WORKERS, thread_name_prefix="code-analyzer"
+            max_workers=self._max_workers, thread_name_prefix="code-analyzer"
         )
 
     # ------------------------------------------------------------------
@@ -92,14 +59,13 @@ class CodeAnalyzerAgent(BaseAgent):
         t_start = time.monotonic()
 
         repo_path: str = state["repo_path"]
-        language: str = state.get("language", "python")
 
         # ------------------------------------------------------------------ #
         # Step 1 — collect source files from disk
         # ------------------------------------------------------------------ #
         loop = asyncio.get_running_loop()
         file_infos: List[FileInfo] = await loop.run_in_executor(
-            self._executor, self._collect_files, repo_path, language
+            self._executor, self._collect_files, repo_path
         )
 
         # ------------------------------------------------------------------ #
@@ -128,7 +94,6 @@ class CodeAnalyzerAgent(BaseAgent):
         output = self.format_output(
             content=overview_docs,
             metadata={
-                "language": language,
                 "repo_path": repo_path,
                 "modules_found": len(structure.get("modules", [])),
                 "functions_found": len(structure.get("functions", [])),
@@ -144,14 +109,15 @@ class CodeAnalyzerAgent(BaseAgent):
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _collect_files(self, repo_path: str, language: str) -> List[FileInfo]:
+    def _collect_files(self, repo_path: str) -> List[FileInfo]:
         """Collect FileInfo records for source files in the repo."""
         root = Path(repo_path)
-        target_extensions = _LANGUAGE_EXTENSIONS.get(language, {".py"})
+        target_extensions = settings.SUPPORTED_EXTENSIONS
+
         file_infos: List[FileInfo] = []
 
         for root_dir, dirs, files in os.walk(root, topdown=True):
-            dirs[:] = [d for d in dirs if d not in _SKIP_DIRS]
+            dirs[:] = [d for d in dirs if d not in settings.EXCLUDED_DIRS]
 
             for filename in files:
                 path = Path(root_dir) / filename
@@ -165,7 +131,7 @@ class CodeAnalyzerAgent(BaseAgent):
 
                 content: str | None = None
 
-                if size <= Settings.MAX_FILE_SIZE_BYTES:
+                if size <= settings.MAX_FILE_SIZE_BYTES:
                     try:
                         raw = path.read_bytes()
                         if b"\x00" not in raw:

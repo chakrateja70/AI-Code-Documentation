@@ -26,7 +26,6 @@ class DocState(TypedDict, total=False):
     """
 
     repo_path: str
-    language: str
     github_url: str
     branch: Optional[str]
 

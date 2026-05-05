@@ -10,9 +10,9 @@ load_dotenv(override=True)
 BASE_DIR: Path = Path(__file__).resolve().parent
 REPOS_DIR: Path = BASE_DIR / "repos"; REPOS_DIR.mkdir(parents=True, exist_ok=True)
 
-SUPPORTED_EXTENSIONS: set[str] = {".py", ".js", ".ts", ".jsx", ".tsx", ".java", ".go", ".rb", ".rs", ".cpp", ".c", ".cs", ".php", ".kt", ".swift", ".scala", ".sh", ".yaml", ".yml", ".json", ".toml", ".md"}
+SUPPORTED_EXTENSIONS: set[str] = {".py", ".js", ".ts", ".jsx", ".tsx", ".java", ".go", ".rb", ".rs", ".cpp", ".c", ".cs", ".php", ".kt", ".swift", ".scala", ".sh", ".yaml", ".yml", ".json", ".toml", ".md", ".txt", ".html", ".css", ".scss", ".less", ".vue", ".svelte", ".dart", ".lua", ".pl", ".pm", ".r", ".jl", ".hs", ".erl", ".ex", ".exs"}
 
-EXCLUDED_DIRS: set[str] = {".git", ".github", "__pycache__", "node_modules", ".venv", "venv", "env", ".env", "dist", "build", "out", ".next", ".nuxt", "target", "vendor", ".mypy_cache", ".pytest_cache", ".ruff_cache", "coverage", ".coverage", "htmlcov", "eggs", ".eggs", "*.egg-info"}
+EXCLUDED_DIRS: set[str] = {".git", ".github", "__pycache__", "node_modules", ".venv", "venv", "env", ".env", "dist", "build", "out", ".next", ".nuxt", "target", "vendor", ".mypy_cache", ".pytest_cache", ".ruff_cache", "coverage", ".coverage", "htmlcov", "eggs", ".eggs", "*.egg-info", "docs", "examples", "tests", "test", "spec", "specs", "scripts", "bin", "tools", "hooks", ".husky", ".vscode", ".idea", ".vs", ".settings", ".cache"}
 
 class Settings:
     """
@@ -22,12 +22,13 @@ class Settings:
     def __init__(self):
         # Required settings - validate immediately
         self.GROQ_API_KEY: str = self._get_required("GROQ_API_KEY")
+        self.GROQ_MODEL: str = "llama-3.3-70b-versatile"
+        self.LLM_TEMPERATURE: float = 0.2
+        
         self.SUPPORTED_EXTENSIONS: set[str] = SUPPORTED_EXTENSIONS
         self.EXCLUDED_DIRS: set[str] = EXCLUDED_DIRS
         
         self.MAX_FILE_SIZE_BYTES: int = int(str(5 * 1024 * 1024))
-        self.GROQ_MODEL: str = "llama-3.3-70b-versatile"
-        self.LLM_TEMPERATURE: float = 0.2
     
     @staticmethod
     def _get_required(key: str) -> str:
