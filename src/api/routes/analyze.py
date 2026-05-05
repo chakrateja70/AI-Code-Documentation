@@ -28,7 +28,7 @@ from pathlib import Path
 from fastapi import APIRouter
 
 import config
-from src.agents import CodeAnalyzerAgent
+from src.agents import CodeAnalyzerAgent, ArchitectureDetectiveAgent
 from src.services import llm_service
 from src.core.exceptions import (
     CodeAnalysisFailedException,
@@ -106,6 +106,8 @@ async def analyze_repository(body: AnalyzeRequest | str) -> SuccessResponse:
     try:
         agent = CodeAnalyzerAgent(llm=llm)
         output = await agent.invoke(state)
+        architecture_agent = ArchitectureDetectiveAgent(llm=llm)
+        architecture_output = await architecture_agent.invoke(state)
     except Exception as exc:
         raise CodeAnalysisFailedException(str(exc))
 
@@ -132,6 +134,14 @@ async def analyze_repository(body: AnalyzeRequest | str) -> SuccessResponse:
                     "classes_found": meta.get("classes_found", 0),
                     "imports_found": meta.get("imports_found", 0),
                 },
+            },
+            "architecture": {
+                "documentation": architecture_output.get("content", ""),
+                "timestamp": architecture_output.get("timestamp"),
+                "agent": architecture_output.get("agent"),
+                "duration_seconds": architecture_output.get("metadata", {}).get(
+                    "analysis_duration_seconds"
+                ),
             },
             "code_structure": state.get("code_structure", {}),
             "errors": state.get("errors", []),

@@ -39,5 +39,10 @@ class DocState(TypedDict, total=False):
     # Future agents will add their own keys here
     # ------------------------------------------------------------------ #
 
+    # ------------------------------------------------------------------ #
+    # Agent 2 — ArchitectureDetectiveAgent
+    # ------------------------------------------------------------------ #
+    architecture_output: Dict[str, Any]
+
     # Accumulated errors from any agent (non-fatal; agents append to it).
     errors: List[str]
