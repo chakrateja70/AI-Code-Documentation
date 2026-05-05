@@ -24,9 +24,11 @@ import os
 import time
 from pathlib import Path
 
-from config import EXCLUDED_DIRS, MAX_FILE_SIZE_BYTES, SUPPORTED_EXTENSIONS
+from config import Settings
 from src.core.models import FileInfo, FileLoaderResult, RepoInfo
 
+# Load settings once at module level to avoid repeated environment variable access
+settings = Settings()
 
 def load_files(repo_info: RepoInfo) -> FileLoaderResult:
     """Collect source files from a repo and return the loader result."""
@@ -39,7 +41,7 @@ def load_files(repo_info: RepoInfo) -> FileLoaderResult:
     for dirpath, dirnames, filenames in os.walk(root, topdown=True):
         dirnames[:] = [
             d for d in dirnames
-            if d not in EXCLUDED_DIRS and not d.endswith(".egg-info")
+            if d not in settings.EXCLUDED_DIRS and not d.endswith(".egg-info")
         ]
 
         for filename in filenames:
@@ -47,7 +49,7 @@ def load_files(repo_info: RepoInfo) -> FileLoaderResult:
             ext = abs_path.suffix.lower()
 
             # Skip unsupported extensions
-            if ext not in SUPPORTED_EXTENSIONS:
+            if ext not in settings.SUPPORTED_EXTENSIONS:
                 continue
 
             rel_path = abs_path.relative_to(root).as_posix()
@@ -59,7 +61,7 @@ def load_files(repo_info: RepoInfo) -> FileLoaderResult:
                 skipped.append(rel_path)
                 continue
 
-            if size > MAX_FILE_SIZE_BYTES:
+            if size > settings.MAX_FILE_SIZE_BYTES:
                 skipped.append(rel_path)
                 continue
 

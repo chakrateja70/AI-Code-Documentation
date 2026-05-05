@@ -14,10 +14,6 @@ SUPPORTED_EXTENSIONS: set[str] = {".py", ".js", ".ts", ".jsx", ".tsx", ".java", 
 
 EXCLUDED_DIRS: set[str] = {".git", ".github", "__pycache__", "node_modules", ".venv", "venv", "env", ".env", "dist", "build", "out", ".next", ".nuxt", "target", "vendor", ".mypy_cache", ".pytest_cache", ".ruff_cache", "coverage", ".coverage", "htmlcov", "eggs", ".eggs", "*.egg-info"}
 
-MAX_FILE_SIZE_BYTES: int = int(os.getenv("MAX_FILE_SIZE_BYTES", str(5 * 1024 * 1024)))
-GROQ_MODEL: str = "llama-3.3-70b-versatile"
-LLM_TEMPERATURE: float = float(os.getenv("LLM_TEMPERATURE", "0.2"))
-
 class Settings:
     """
     A centralized class to hold all application settings loaded from environment variables.
@@ -28,9 +24,10 @@ class Settings:
         self.GROQ_API_KEY: str = self._get_required("GROQ_API_KEY")
         self.SUPPORTED_EXTENSIONS: set[str] = SUPPORTED_EXTENSIONS
         self.EXCLUDED_DIRS: set[str] = EXCLUDED_DIRS
-        self.MAX_FILE_SIZE_BYTES: int = MAX_FILE_SIZE_BYTES
-        self.GROQ_MODEL: str = GROQ_MODEL
-        self.LLM_TEMPERATURE: float = LLM_TEMPERATURE
+        
+        self.MAX_FILE_SIZE_BYTES: int = int(str(5 * 1024 * 1024))
+        self.GROQ_MODEL: str = "llama-3.3-70b-versatile"
+        self.LLM_TEMPERATURE: float = 0.2
     
     @staticmethod
     def _get_required(key: str) -> str:

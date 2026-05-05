@@ -34,7 +34,7 @@ from src.agents.base_agent import BaseAgent
 from src.core.models import FileInfo, ParsedFile
 from src.core.state import DocState
 from src.services.code_parser import parse_file
-import config
+from config import Settings
 
 
 # ---------------------------------------------------------------------------
@@ -71,8 +71,7 @@ _SKIP_DIRS: frozenset[str] = frozenset(
 )
 
 # Maximum file size we'll read into memory for AST analysis.
-_MAX_FILE_BYTES: int = config.MAX_FILE_SIZE_BYTES
-
+Settings = Settings()  # Load settings once at module level
 
 class CodeAnalyzerAgent(BaseAgent):
     """Analyze repo structure and generate documentation with an LLM."""
@@ -81,7 +80,7 @@ class CodeAnalyzerAgent(BaseAgent):
         super().__init__(llm, "code_analyzer")
         self._max_workers = max(1, max_workers)
         self._executor = ThreadPoolExecutor(
-            max_workers=self._max_workers, thread_name_prefix="code-analyzer"
+            max_workers=Settings.MAX_WORKERS, thread_name_prefix="code-analyzer"
         )
 
     # ------------------------------------------------------------------
@@ -166,7 +165,7 @@ class CodeAnalyzerAgent(BaseAgent):
 
                 content: str | None = None
 
-                if size <= _MAX_FILE_BYTES:
+                if size <= Settings.MAX_FILE_SIZE_BYTES:
                     try:
                         raw = path.read_bytes()
                         if b"\x00" not in raw:
