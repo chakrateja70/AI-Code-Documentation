@@ -22,3 +22,7 @@ langchain-groq>=0.2.0
 
 # Environment variables
 python-dotenv>=1.0.0
+
+# PDF generation
+fpdf2>=2.8.0
+Pillow>=8.3.2
